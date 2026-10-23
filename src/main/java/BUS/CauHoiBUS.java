@@ -99,4 +99,9 @@ public class CauHoiBUS {
         }
         return id;
     }
+    public void importWithAnswers(CauHoiDTO question, java.util.List<DTO.DapAnDTO> answers) throws java.sql.SQLException {
+        helper.WordImportValidation.validate(question.getNoidung(), answers.stream().map(DTO.DapAnDTO::getNoidungtl).toList(),
+                (int) answers.stream().filter(DTO.DapAnDTO::getLadapan).count(), question.getMaloai());
+        dao.insertWithAnswers(question, answers);
+    }
 }

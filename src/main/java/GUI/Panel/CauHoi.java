@@ -23,7 +23,6 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -35,32 +34,9 @@ import javax.swing.table.TableCellRenderer;
 import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.apache.poi.xwpf.usermodel.XWPFAbstractNum;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFNum;
-import org.apache.poi.xwpf.usermodel.XWPFNumbering;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFRun;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTNumPr;
-import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPr;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 public class CauHoi extends JPanel implements ActionListener, ItemListener {
-
-    private static final java.util.regex.Pattern QUESTION_START =
-            java.util.regex.Pattern.compile("^(Câu\\s*)?\\d+[\\.\\)\\:]\\s*\\S.*", java.util.regex.Pattern.CASE_INSENSITIVE);
-
-    private static final java.util.regex.Pattern ANSWER_START =
-            java.util.regex.Pattern.compile("^([A-Da-d])[\\.\\)]\\s*\\S.*");
-
-    private static final java.util.regex.Pattern ANSWER_KEY_LINE =
-            java.util.regex.Pattern.compile("^(Đáp\\s*án|Dap\\s*an|Answer)\\s*[:\\-]?\\s*([A-Da-d])\\b",
-                    java.util.regex.Pattern.CASE_INSENSITIVE);
-
-    private static final java.util.regex.Pattern CORRECT_MARKER =
-            java.util.regex.Pattern.compile("[\\(\\[]\\s*(\\*|Đ|đ|đúng|dung|correct)\\s*[\\)\\]]|(?<=\\S)\\s*\\*\\s*$",
-                    java.util.regex.Pattern.CASE_INSENSITIVE);
 
     PanelBorderRadius pnlMain, functionBar;
     private GUI.Main mainFrame;
@@ -328,7 +304,8 @@ public class CauHoi extends JPanel implements ActionListener, ItemListener {
 
     public void importWord() {
         JFileChooser jf = new JFileChooser();
-        jf.setFileFilter(new FileNameExtensionFilter("Word Documents (.docx)", "docx"));
+        jf.setFileFilter(new FileNameExtensionFilter("Word Documents (.doc, .docx)", "doc", "docx"));
+        jf.setAcceptAllFileFilterUsed(false);
         int result = jf.showOpenDialog(this);
         if (result != JFileChooser.APPROVE_OPTION) {
             return;
@@ -342,9 +319,9 @@ public class CauHoi extends JPanel implements ActionListener, ItemListener {
         JComboBox<DoKhoDTO> cbDoKho = new JComboBox<>(new DefaultComboBoxModel<>(doKhoBUS.getAll().toArray(new DoKhoDTO[0])));
         JComboBox<LoaiCauHoiDTO> cbLoai = new JComboBox<>(new DefaultComboBoxModel<>(loaiCauHoiBUS.getAll().toArray(new LoaiCauHoiDTO[0])));
 
-        cbMonHoc.setRenderer((list, value, index, isSelected, cellHasFocus) -> new JLabel(value.getTenmonhoc()));
-        cbDoKho.setRenderer((list, value, index, isSelected, cellHasFocus) -> new JLabel(value.getTendokho()));
-        cbLoai.setRenderer((list, value, index, isSelected, cellHasFocus) -> new JLabel(value.getTenloai()));
+        cbMonHoc.setRenderer((list, value, index, isSelected, cellHasFocus) -> new JLabel(value == null ? "" : value.getTenmonhoc()));
+        cbDoKho.setRenderer((list, value, index, isSelected, cellHasFocus) -> new JLabel(value == null ? "" : value.getTendokho()));
+        cbLoai.setRenderer((list, value, index, isSelected, cellHasFocus) -> new JLabel(value == null ? "" : value.getTenloai()));
 
         pnlConfig.add(new JLabel("Chọn môn học:"));
         pnlConfig.add(cbMonHoc);
@@ -359,191 +336,51 @@ public class CauHoi extends JPanel implements ActionListener, ItemListener {
             return;
         }
 
+        if (cbMonHoc.getSelectedItem() == null || cbDoKho.getSelectedItem() == null || cbLoai.getSelectedItem() == null) {
+            JOptionPane.showMessageDialog(this, "Cần có môn học, độ khó và loại câu hỏi trước khi nhập.");
+            return;
+        }
         int selectedMonHoc = ((MonHocDTO) cbMonHoc.getSelectedItem()).getMamonhoc();
         int selectedDoKho = ((DoKhoDTO) cbDoKho.getSelectedItem()).getMadokho();
         int selectedLoai = ((LoaiCauHoiDTO) cbLoai.getSelectedItem()).getMaloai();
 
-        try (FileInputStream fis = new FileInputStream(file); XWPFDocument document = new XWPFDocument(fis)) {
-            XWPFNumbering numbering = document.getNumbering();
-            DapAnBUS daBUS = new DapAnBUS();
-            CauHoiDTO currentCH = null;
-            ArrayList<DapAnDTO> currentListDA = new ArrayList<>();
-            int countSuccess = 0, countSkipped = 0;
-
-            for (XWPFParagraph para : document.getParagraphs()) {
-                String rawText = para.getText();
-                if (rawText == null) continue;
-                String text = rawText.trim();
-                if (text.isEmpty()) continue;
-
-                String numFmt = getListNumFmt(para, numbering);
-                boolean isNumberedQuestion = "decimal".equalsIgnoreCase(numFmt) || "decimalZero".equalsIgnoreCase(numFmt);
-                boolean isLetteredAnswer = "lowerLetter".equalsIgnoreCase(numFmt) || "upperLetter".equalsIgnoreCase(numFmt);
-
-                java.util.regex.Matcher keyMatcher = ANSWER_KEY_LINE.matcher(text);
-                java.util.regex.Matcher qMatcher = QUESTION_START.matcher(text);
-                java.util.regex.Matcher aMatcher = ANSWER_START.matcher(text);
-
-                boolean isQuestionStart = isNumberedQuestion || qMatcher.matches();
-                boolean isAnswerStart = isLetteredAnswer || aMatcher.matches();
-
-                if (keyMatcher.find() && currentCH != null && !currentListDA.isEmpty()) {
-                    applyAnswerKey(currentListDA, keyMatcher.group(2));
-                } else if (isQuestionStart) {
-                    if (currentCH != null && !currentListDA.isEmpty()) {
-                        if (saveToDatabase(currentCH, currentListDA, daBUS)) {
-                            countSuccess++;
-                        } else {
-                            countSkipped++;
-                        }
-                    }
-                    currentCH = new CauHoiDTO();
-                    currentCH.setNoidung(cleanQuestionText(text));
-                    currentCH.setMamonhoc(selectedMonHoc);
-                    currentCH.setMadokho(selectedDoKho);
-                    currentCH.setMaloai(selectedLoai);
-                    currentCH.setNguoitao(mainFrame.getNguoiDung().getManguoidung());
-                    currentCH.setTrangthai(1);
-                    currentListDA = new ArrayList<>();
-                } else if (isAnswerStart && currentCH != null) {
-                    boolean isCorrect = isAnswerCorrect(para, text);
-                    String cleanText = cleanAnswerText(text);
-                    currentListDA.add(new DapAnDTO(0, 0, cleanText, isCorrect));
-                } else if (currentCH != null && currentListDA.isEmpty()) {
-                    currentCH.setNoidung(currentCH.getNoidung() + " " + text);
-                } else if (currentCH != null && !currentListDA.isEmpty()) {
-                    DapAnDTO lastDA = currentListDA.get(currentListDA.size() - 1);
-                    lastDA.setNoidungtl(lastDA.getNoidungtl() + " " + text);
+        try {
+            var questions = helper.WordQuestionParser.parse(file);
+            if (questions.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Không tìm thấy văn bản câu hỏi trong file Word.");
+                return;
+            }
+            if (!GUI.Dialog.WordImportPreview.edit(this, questions, selectedLoai)) return;
+            int success = 0;
+            java.util.List<String> failures = new ArrayList<>();
+            for (int i = 0; i < questions.size(); i++) {
+                var question = questions.get(i);
+                CauHoiDTO ch = new CauHoiDTO(0, question.text, selectedDoKho, selectedLoai,
+                        selectedMonHoc, mainFrame.getNguoiDung().getManguoidung(), 1);
+                ArrayList<DapAnDTO> answers = new ArrayList<>();
+                for (int j = 0; j < question.answers.size(); j++) {
+                    answers.add(new DapAnDTO(0, 0, question.answers.get(j), question.correct.contains(j)));
+                }
+                try {
+                    bus.importWithAnswers(ch, answers);
+                    success++;
+                } catch (java.sql.SQLException ex) {
+                    failures.add("Câu " + (i + 1) + ": " + ex.getMessage());
                 }
             }
-
-            if (currentCH != null && !currentListDA.isEmpty()) {
-                if (saveToDatabase(currentCH, currentListDA, daBUS)) {
-                    countSuccess++;
-                } else {
-                    countSkipped++;
-                }
-            }
-
-            String msg = "Nhập thành công " + countSuccess + " câu hỏi!";
-            if (countSkipped > 0) {
-                msg += "\nBỏ qua " + countSkipped + " câu do thiếu nội dung hoặc không có đáp án hợp lệ.";
-            }
-            JOptionPane.showMessageDialog(this, msg, "Hoàn tất", JOptionPane.INFORMATION_MESSAGE);
-            loadDataTable(bus.getAll());
-
+            listHienTai = bus.getAll();
+            loadDataTable(listHienTai);
+            JTextArea report = new JTextArea("Nhập thành công " + success + "/" + questions.size()
+                    + " câu hỏi.\n" + String.join("\n", failures), 12, 65);
+            report.setEditable(false);
+            report.setLineWrap(true);
+            report.setWrapStyleWord(true);
+            JOptionPane.showMessageDialog(this, new JScrollPane(report), "Kết quả nhập Word",
+                    failures.isEmpty() ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
         } catch (Exception ex) {
             ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Lỗi đọc file Word: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
         }
-    }
-
-    private String getListNumFmt(XWPFParagraph para, XWPFNumbering numbering) {
-        if (numbering == null) {
-            return null;
-        }
-        try {
-            CTPPr ppr = para.getCTP().getPPr();
-            if (ppr == null || !ppr.isSetNumPr()) {
-                return null;
-            }
-            CTNumPr numPr = ppr.getNumPr();
-            if (numPr == null || numPr.getNumId() == null) {
-                return null;
-            }
-            BigInteger numId = numPr.getNumId().getVal();
-            BigInteger ilvl = (numPr.getIlvl() != null) ? numPr.getIlvl().getVal() : BigInteger.ZERO;
-
-            XWPFNum num = numbering.getNum(numId);
-            if (num == null) {
-                return null;
-            }
-            BigInteger abstractNumId = num.getCTNum().getAbstractNumId().getVal();
-            XWPFAbstractNum abstractNum = numbering.getAbstractNum(abstractNumId);
-            if (abstractNum == null) {
-                return null;
-            }
-
-            for (CTLvl lvl : abstractNum.getAbstractNum().getLvlList()) {
-                if (lvl.getIlvl().equals(ilvl) && lvl.getNumFmt() != null) {
-                    return lvl.getNumFmt().getVal().toString();
-                }
-            }
-        } catch (Exception ex) {
-            return null;
-        }
-        return null;
-    }
-
-    private boolean isAnswerCorrect(XWPFParagraph para, String text) {
-        if (CORRECT_MARKER.matcher(text).find()) {
-            return true;
-        }
-
-        if ("Heading1".equals(para.getStyle())) {
-            return true;
-        }
-
-        List<XWPFRun> runs = para.getRuns();
-        if (runs == null || runs.isEmpty()) {
-            return false;
-        }
-
-        boolean hasText = false;
-        boolean allBold = true;
-        boolean hasDistinctColor = false;
-
-        for (XWPFRun run : runs) {
-            String runText = run.getText(0);
-            if (runText != null && !runText.trim().isEmpty()) {
-                hasText = true;
-                if (!run.isBold()) {
-                    allBold = false;
-                }
-                String color = run.getColor();
-                if (color != null && !color.equalsIgnoreCase("000000") && !color.equalsIgnoreCase("auto")) {
-                    hasDistinctColor = true;
-                }
-            }
-        }
-
-        return hasText && (allBold || hasDistinctColor);
-    }
-
-    private String cleanQuestionText(String text) {
-        return text.replaceFirst("^(Câu\\s*)?\\d+[\\.\\)\\:]\\s*", "").trim();
-    }
-
-    private String cleanAnswerText(String text) {
-        String cleaned = text.replaceFirst("^[A-Da-d][\\.\\)]\\s*", "");
-        cleaned = CORRECT_MARKER.matcher(cleaned).replaceAll("");
-        return cleaned.trim();
-    }
-
-    private void applyAnswerKey(ArrayList<DapAnDTO> listDA, String letter) {
-        int index = Character.toUpperCase(letter.charAt(0)) - 'A';
-        if (index < 0 || index >= listDA.size()) {
-            return;
-        }
-        for (int i = 0; i < listDA.size(); i++) {
-            listDA.get(i).setLadapan(i == index);
-        }
-    }
-
-    private boolean saveToDatabase(CauHoiDTO ch, ArrayList<DapAnDTO> listDA, DapAnBUS daBUS) {
-        if (ch.getNoidung().isEmpty() || listDA.isEmpty()) {
-            return false;
-        }
-
-        int generatedId = bus.addReturnId(ch);
-        if (generatedId != -1) {
-            for (DapAnDTO da : listDA) {
-                da.setMacauhoi(generatedId);
-                daBUS.add(da);
-            }
-            return true;
-        }
-        return false;
     }
 
     public void importExcel() {

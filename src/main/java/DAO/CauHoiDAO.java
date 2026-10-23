@@ -139,4 +139,47 @@ public class CauHoiDAO {
         }
         return lastId;
     }
+    /** One question and all its answers are committed together. */
+    public void insertWithAnswers(CauHoiDTO question, java.util.List<DTO.DapAnDTO> answers) throws SQLException {
+        try (Connection connection = JDBCUtil.getConnection()) {
+            if (connection == null) throw new SQLException("Không kết nối được database.");
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement duplicate = connection.prepareStatement(
+                        "SELECT macauhoi FROM cauhoi WHERE LOWER(TRIM(noidung)) = LOWER(?) AND trangthai = 1")) {
+                    duplicate.setString(1, question.getNoidung().trim());
+                    try (ResultSet rs = duplicate.executeQuery()) {
+                        if (rs.next()) throw new SQLException("Nội dung câu hỏi đã tồn tại.");
+                    }
+                }
+                int id;
+                try (PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO cauhoi(noidung, madokho, maloai, mamonhoc, nguoitao, trangthai) VALUES(?,?,?,?,?,1)", Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setString(1, question.getNoidung().trim());
+                    ps.setInt(2, question.getMadokho());
+                    ps.setInt(3, question.getMaloai());
+                    ps.setInt(4, question.getMamonhoc());
+                    ps.setInt(5, question.getNguoitao());
+                    if (ps.executeUpdate() != 1) throw new SQLException("Không lưu được câu hỏi.");
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        if (!keys.next()) throw new SQLException("Không lấy được mã câu hỏi.");
+                        id = keys.getInt(1);
+                    }
+                }
+                try (PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO dapan(macauhoi, noidungtl, ladapan) VALUES(?,?,?)")) {
+                    for (DTO.DapAnDTO answer : answers) {
+                        ps.setInt(1, id);
+                        ps.setString(2, answer.getNoidungtl().trim());
+                        ps.setBoolean(3, answer.getLadapan());
+                        if (ps.executeUpdate() != 1) throw new SQLException("Không lưu được đáp án.");
+                    }
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException ex) {
+                try { connection.rollback(); } catch (SQLException rollback) { ex.addSuppressed(rollback); }
+                throw ex;
+            }
+        }
+    }
 }

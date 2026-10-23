@@ -22,6 +22,21 @@
 #### Tài khoản Sinh viên
 - Username: sv1
 - Password: 123
+## Nhập câu hỏi từ Word
+
+Trong màn hình **Câu hỏi → NHẬP WORD**, chọn file `.doc` hoặc `.docx`, môn học, độ khó và loại câu hỏi. Ứng dụng nhận diện định dạng theo nội dung file (kể cả khi đặt sai phần mở rộng), rồi mở màn hình xem/sửa trước khi lưu; không cần dùng một mẫu Word cố định.
+
+- Hỗ trợ câu hỏi có hoặc không đánh số, lựa chọn A–H, gạch đầu dòng, lựa chọn cùng dòng và văn bản trong bảng Word theo thứ tự tài liệu.
+- Nhận diện dòng `Đáp án: B`, `Đáp án: nội dung`, `Answer: B`, `Trả lời: nội dung`; giữ hỗ trợ đánh dấu đúng bằng chữ đậm, màu chữ hoặc dấu `(*)`, `[đúng]`. Các dấu định dạng chỉ là gợi ý và cần được kiểm tra trong màn hình xem trước.
+- Chữ đậm được kiểm tra riêng theo từng lựa chọn, kể cả nhiều lựa chọn chung dòng, xuống dòng mềm, chỉ tô đậm nhãn A/B/C/D hoặc tô đậm nội dung nhưng để nhãn thường. Với `.docx`, đọc thêm định dạng đậm từ style của chữ/đoạn. Nếu nhiều lựa chọn cùng được đánh dấu, người dùng cần xác nhận một đáp án đúng ở màn hình xem trước.
+- Với đoạn văn bản không có nhãn rõ ràng, hệ thống đưa ra kết quả tách dự kiến để người dùng sửa. Mỗi đáp án hiển thị trên một dòng; nhập số thứ tự đáp án đúng, hoặc bỏ chọn câu không muốn nhập. Hệ thống không tự giải câu hỏi để đoán đáp án đúng.
+- Trắc nghiệm hỗ trợ 2–4 lựa chọn và một đáp án đúng; Đúng/Sai dùng hai lựa chọn theo thứ tự Đúng, Sai; Điền khuyết dùng một câu trả lời. Các giới hạn này giữ tương thích với giao diện sửa câu hỏi và chấm thi hiện có.
+- Mỗi câu hỏi và toàn bộ đáp án được lưu trong cùng transaction. Câu trùng hoặc lỗi database được báo riêng; lỗi ghi đáp án sẽ rollback câu hỏi đó.
+
+Hiện hỗ trợ văn bản trong `.doc` (Word 97–2003) và `.docx`, chưa hỗ trợ file có mật khẩu, ảnh chụp đề/OCR, công thức hoặc nội dung chỉ có trong ảnh. Với `.doc`, hỗ trợ chữ đậm và dấu/dòng chỉ đáp án; màu chữ chưa được dùng để suy ra đáp án đúng. Tài liệu có bố cục mơ hồ có thể cần sửa kết quả nhận diện trước khi lưu. Một lần nhập dùng chung môn học, độ khó và loại câu hỏi đã chọn.
+
+Chạy kiểm tra: `mvn test`.
+
 ## Giao diện
 
 <h4 align="center">Đăng nhập</h4>
